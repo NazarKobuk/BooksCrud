@@ -27,10 +27,10 @@ namespace BooksCrud.Controllers
         [HttpGet]
         public IActionResult GetOneBook(GetOneBook book)
         {
-            if(_db.Books.Where(x => x.Title == book.Title).Count() > 0)
+            if(_db.Books.Where(x => x.Id == book.Id).Count() > 0)
             {
                 
-                return Json(_db.Books.Where(x => x.Title == book.Title));
+                return Json(_db.Books.Where(x => x.Id == book.Id));
             }
             else
             {

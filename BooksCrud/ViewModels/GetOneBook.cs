@@ -8,7 +8,6 @@ namespace BooksCrud.ViewModels
 {
     public class GetOneBook
     {
-        [Required(ErrorMessage = "Title field shouldn't be empty ")]
-        public string Title { get; set; }
+        public int Id { get; set; }
     }
 }
