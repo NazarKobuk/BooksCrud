@@ -18,6 +18,8 @@ namespace BooksCrud.Models
        
         public string Year { get; set; }
         public int Downloads { get; set; }
+        public string BookFilePath { get; set; }
+
 
     }
 }
