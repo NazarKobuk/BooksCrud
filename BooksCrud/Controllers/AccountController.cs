@@ -1,10 +1,13 @@
 ﻿using System;
+using System.Collections;
 using System.Collections.Generic;
 using System.IdentityModel.Tokens.Jwt;
 using System.Linq;
 using System.Security.Claims;
+using System.Security.Cryptography;
 using System.Threading.Tasks;
 using BooksCrud.Models;
+using BooksCrud.ViewModels;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 
@@ -20,23 +23,11 @@ namespace BooksCrud.Controllers
         {
             _db = db;
         }
-       
-
+      
         [HttpPost]
-        public IActionResult Register(string username, string password)
+        public IActionResult Token(UserAuthorization info)
         {
-            Person p = new Person { Login = username, Password = password, Role = "user" };
-
-            _db.Persons.Add(p);
-            _db.SaveChanges();
-            return Ok();
-            
-        }
-
-        [HttpPost]
-        public IActionResult Token(string username, string password)
-        {
-            var identity = GetIdentity(username, password);
+            var identity = GetIdentity(info.Login, info.Password);
             if (identity == null)
             {
                 return BadRequest(new { errorText = "Invalid username or password." });
@@ -62,24 +53,143 @@ namespace BooksCrud.Controllers
             return Json(response);
         }
 
-        private ClaimsIdentity GetIdentity(string username, string password)
+        [HttpPost]
+        public IActionResult Register(UserAuthorization info)
         {
-            Person person = _db.Persons.FirstOrDefault(x => x.Login == username && x.Password == password);
-            if (person != null)
+            if(_db.Users.Where(x => x.Login == info.Login).Any())
             {
-                var claims = new List<Claim>
-                {
-                    new Claim(ClaimsIdentity.DefaultNameClaimType, person.Login),
-                    new Claim(ClaimsIdentity.DefaultRoleClaimType, person.Role)
-                };
-                ClaimsIdentity claimsIdentity =
-                new ClaimsIdentity(claims, "Token", ClaimsIdentity.DefaultNameClaimType,
-                    ClaimsIdentity.DefaultRoleClaimType);
-                return claimsIdentity;
+                return BadRequest(new { error = "There is a user with this nickname already, chose another name" });
             }
 
-            // если пользователя не найдено
-            return null;
+            User p = new User { Login = info.Login, PasswordHash = HashingPassword(info.Password)};
+
+            _db.Users.Add(p);
+            _db.SaveChanges();
+
+            var token = Token(info);
+            return token;
+
+        }
+
+        private ClaimsIdentity GetIdentity(string username, string password)
+        {
+            try
+            {
+                User user = _db.Users.FirstOrDefault(x => x.Login == username);
+
+                if (user != null)
+                {
+                    if (VerifyHashingPassword(user.PasswordHash, password))
+                    {
+                        var claims = new List<Claim>
+                    {
+                    new Claim(ClaimsIdentity.DefaultNameClaimType, user.Login),
+                    new Claim(ClaimsIdentity.DefaultRoleClaimType, user.Role)
+                    };
+                        ClaimsIdentity claimsIdentity =
+                        new ClaimsIdentity(claims, "Token", ClaimsIdentity.DefaultNameClaimType,
+                        ClaimsIdentity.DefaultRoleClaimType);
+                        return claimsIdentity;
+                    }
+                    return null;
+
+                }
+                return null;
+            }
+            catch (Exception)
+            {
+                return null;
+            }
+        }
+
+        private static string HashingPassword(string password)
+        {
+
+            byte[] salt;
+            byte[] buffer2;
+            if (password == null)
+            {
+                throw new ArgumentNullException("password");
+            }
+            using (Rfc2898DeriveBytes bytes = new Rfc2898DeriveBytes(password, 0x10, 0x3e8))
+            {
+                salt = bytes.Salt;
+                buffer2 = bytes.GetBytes(0x20);
+            }
+            byte[] dst = new byte[0x31];
+            Buffer.BlockCopy(salt, 0, dst, 1, 0x10);
+            Buffer.BlockCopy(buffer2, 0, dst, 0x11, 0x20);
+            return Convert.ToBase64String(dst);
+
+            /*new RNGCryptoServiceProvider().GetBytes(salt = new byte[16]);
+
+            var pbkdf2 = new Rfc2898DeriveBytes(password, salt, 10000);
+            byte[] hash = pbkdf2.GetBytes(20);
+
+            byte[] hashBytes = new byte[32];
+            Buffer.BlockCopy(salt, 0, hashBytes, 0, 16);
+            Array.Copy(hash, 0, hashBytes, 16, 20);
+
+            string savedPasswordHash = Convert.ToBase64String(hashBytes);
+            return savedPasswordHash;
+            */
+        }
+            
+        
+
+        private static bool VerifyHashingPassword(string hashedPassword, string password)
+        {
+            byte[] buffer4;
+            if (hashedPassword == null)
+            {
+                return false;
+            }
+            if (password == null)
+            {
+                throw new ArgumentNullException("password");
+            }
+            byte[] src = Convert.FromBase64String(hashedPassword);
+            if ((src.Length != 0x31) || (src[0] != 0))
+            {
+                return false;
+            }
+            byte[] dst = new byte[0x10];
+            Buffer.BlockCopy(src, 1, dst, 0, 0x10);
+            byte[] buffer3 = new byte[0x20];
+            Buffer.BlockCopy(src, 0x11, buffer3, 0, 0x20);
+            using (Rfc2898DeriveBytes bytes = new Rfc2898DeriveBytes(password, dst, 0x3e8))
+            {
+                buffer4 = bytes.GetBytes(0x20);
+            }
+            return StructuralComparisons.StructuralEqualityComparer.Equals(buffer3, buffer4);
+
+            /*
+            if (hashedPassword == null)
+            {
+                return false;
+            }
+            if (password == null)
+            {
+                throw new ArgumentNullException("password");
+            }
+
+            byte[] hashBytes = Convert.FromBase64String(hashedPassword);
+            byte[] salt = new byte[16];
+            Array.Copy(hashBytes, 0, salt, 0, 16);
+
+            var pbkdf2 = new Rfc2898DeriveBytes(password, salt, 10000);
+            byte[] hash = pbkdf2.GetBytes(20);
+
+            for (int i = 0; i < 20; i++)
+            {
+                if(hashBytes[i + 16] != hash[i])
+                {
+                    return false;
+                    throw new UnauthorizedAccessException();
+                }
+            }
+            return true;
+            */
         }
     }
 }

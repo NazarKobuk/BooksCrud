@@ -2,6 +2,7 @@
 using System.Collections.Generic;
 using System.IO;
 using System.Linq;
+using System.Security.Claims;
 using System.Threading.Tasks;
 using BooksCrud.Models;
 using BooksCrud.ViewModels;
@@ -21,11 +22,13 @@ namespace BooksCrud.Controllers
     {
         readonly ApplicationContext _db;
         readonly IWebHostEnvironment _hostingEnvironment;
+        readonly IHttpContextAccessor _httpContextAccessor;
 
-        public BookController(ApplicationContext db, IWebHostEnvironment hostingEnvironment)
+        public BookController(ApplicationContext db, IWebHostEnvironment hostingEnvironment, IHttpContextAccessor httpContextAccessor)
         {
             _db = db;
             _hostingEnvironment = hostingEnvironment;
+            _httpContextAccessor = httpContextAccessor;
         }
 
         [Authorize]
@@ -34,15 +37,13 @@ namespace BooksCrud.Controllers
             return Ok($"Ваш логин: {User.Identity.Name}");
         }
 
-        [Authorize(Roles = "admin")]
+        [Authorize(Roles = "user")]
         public IActionResult GetRole()
         {
-            return Ok("Ваша роль: администратор");
+            return Ok("Ваша роль: пользователь");
         }
 
         [HttpGet]
-        [Authorize]
-
         public IActionResult GetBook()
         {
             return Json(_db.Books.ToList());
@@ -62,7 +63,9 @@ namespace BooksCrud.Controllers
             }
         }
 
+
         [HttpPost]
+        [Authorize]
         public async Task<IActionResult> PostBook([FromForm] CreateBook book)
         {
             if (Int32.Parse(book.Year) > DateTime.Now.Year || Int32.Parse(book.Year) < 0)
@@ -83,10 +86,13 @@ namespace BooksCrud.Controllers
                 string filePath = Path.Combine(uploadsFolder, uniqueFileName);
                 book.BookFile.CopyTo(new FileStream(filePath, FileMode.Create));
 
-                Book bk = new Book { Author = book.Author, Title = book.Title, Year = book.Year, BookFilePath = uniqueFileName };
+                var userId = _httpContextAccessor.HttpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
+                var id = (int)Convert.ChangeType(userId, typeof(int));
+
+                Book bk = new Book { Author = book.Author, Title = book.Title, Year = book.Year, BookFilePath = uniqueFileName, UserId = id};
                 _db.Books.Add(bk);
                 _db.SaveChanges();
-                return Ok(new { name = book.BookFile.FileName });
+                return Ok(new { name = book.BookFile.FileName});
             }
             else
             {
@@ -104,9 +110,6 @@ namespace BooksCrud.Controllers
                 var uniqueFileName = Guid.NewGuid().ToString() + "_" + file.FileName;
                 string filePath = Path.Combine(uploadsFolder, uniqueFileName);
                 file.CopyTo(new FileStream(filePath, FileMode.Create));
-                //var path = Path.Combine(Directory.GetCurrentDirectory(), "wwwroot/Books", file.FileName);
-                //var stream = new FileStream(path, FileMode.Create);
-                //file.CopyToAsync(stream);
                 return Ok(new { lenght = file.Length, name = file.FileName });
             }
             else
@@ -134,6 +137,7 @@ namespace BooksCrud.Controllers
         }
 
         [HttpPut]
+        [Authorize(Roles = "admin")]
         public IActionResult PutBook(CreateBook book)
         {
             if (_db.Books.Where(x => x.Id == book.Id).Count() > 0)
@@ -152,6 +156,7 @@ namespace BooksCrud.Controllers
         }
 
         [HttpDelete]
+        [Authorize(Roles = "admin")]
         public IActionResult DeleteBook(int Id)
         {
             if (_db.Books.Where(x => x.Id == Id).Count() > 0)

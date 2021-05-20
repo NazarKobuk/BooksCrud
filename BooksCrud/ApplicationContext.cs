@@ -11,7 +11,7 @@ namespace BooksCrud
     {
        
         public DbSet<Book> Books { get; set; }
-        public DbSet<Person> Persons { get; set; }
+        public DbSet<User> Users { get; set; }
 
         public ApplicationContext(DbContextOptions<ApplicationContext> options)
             : base(options)

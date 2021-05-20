@@ -55,6 +55,8 @@ namespace BooksCrud
                         };
                     });
 
+            services.AddHttpContextAccessor();
+
             services.AddDbContext<ApplicationContext>(options => options.UseSqlServer(connection));
 
             services.AddControllers();
