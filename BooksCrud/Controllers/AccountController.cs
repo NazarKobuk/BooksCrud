@@ -8,6 +8,7 @@ using System.Security.Cryptography;
 using System.Threading.Tasks;
 using BooksCrud.Models;
 using BooksCrud.ViewModels;
+using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.IdentityModel.Tokens;
 
@@ -32,6 +33,7 @@ namespace BooksCrud.Controllers
             {
                 return BadRequest(new { errorText = "Invalid username or password." });
             }
+            var Id = GetId(info.Login, info.Password);
 
             var now = DateTime.UtcNow;
             // создаем JWT-токен
@@ -47,7 +49,9 @@ namespace BooksCrud.Controllers
             var response = new
             {
                 access_token = encodedJwt,
-                username = identity.Name
+                username = identity.Name,
+                id = Id
+
             };
 
             return Json(response);
@@ -61,7 +65,7 @@ namespace BooksCrud.Controllers
                 return BadRequest(new { error = "There is a user with this nickname already, chose another name" });
             }
 
-            User p = new User { Login = info.Login, PasswordHash = HashingPassword(info.Password)};
+            User p = new User { Login = info.Login, PasswordHash = HashingPassword(info.Password), Role = info.Role};
 
             _db.Users.Add(p);
             _db.SaveChanges();
@@ -71,7 +75,20 @@ namespace BooksCrud.Controllers
 
         }
 
-        private ClaimsIdentity GetIdentity(string username, string password)
+        public int? GetId(string username, string password)
+        {
+            User user = _db.Users.FirstOrDefault(x => x.Login == username);
+            if(user != null)
+            {
+                return user.Id;
+            }
+            else
+            {
+                return null;
+            }
+        }
+
+        public ClaimsIdentity GetIdentity(string username, string password)
         {
             try
             {
@@ -85,7 +102,8 @@ namespace BooksCrud.Controllers
                     {
                     new Claim(ClaimsIdentity.DefaultNameClaimType, user.Login),
                     new Claim(ClaimsIdentity.DefaultRoleClaimType, user.Role)
-                    };
+                        };
+
                         ClaimsIdentity claimsIdentity =
                         new ClaimsIdentity(claims, "Token", ClaimsIdentity.DefaultNameClaimType,
                         ClaimsIdentity.DefaultRoleClaimType);
@@ -102,7 +120,7 @@ namespace BooksCrud.Controllers
             }
         }
 
-        private static string HashingPassword(string password)
+        public static string HashingPassword(string password)
         {
 
             byte[] salt;
@@ -137,7 +155,7 @@ namespace BooksCrud.Controllers
             
         
 
-        private static bool VerifyHashingPassword(string hashedPassword, string password)
+        public static bool VerifyHashingPassword(string hashedPassword, string password)
         {
             byte[] buffer4;
             if (hashedPassword == null)
@@ -191,5 +209,57 @@ namespace BooksCrud.Controllers
             return true;
             */
         }
+
+        [HttpGet]
+        [Authorize(Roles = "admin")]
+        public IActionResult GetUsers()
+        {
+            return Json(_db.Users.ToList());
+        }
+
+        [HttpDelete]
+        [Authorize(Roles = "admin")]
+        public IActionResult DeleteUser(int Id)
+        {
+            if (_db.Users.Where(x => x.Id == Id).Count() > 0)
+            {
+                _db.Users.Remove(_db.Users.Find(Id));
+                _db.SaveChanges();
+                return Ok();
+            }
+            else
+            {
+                return BadRequest(new { error = "There is no user with this Id" });
+            }
+        }
+
+        [HttpPost]
+        [Authorize(Roles = "admin")]
+        public IActionResult CreateUser(UserAuthorization user)
+        {
+            if (_db.Users.Where(x => x.Login == user.Login).Count() > 0)
+            {
+                return BadRequest(new { error = "There is already user with this nickname" });
+            }
+
+            try
+            {
+                User p = new User { Login = user.Login, PasswordHash = AccountController.HashingPassword(user.Password), Role = user.Role };
+                _db.Users.Add(p);
+                _db.SaveChanges();
+
+                string login = user.Login;
+                string password = user.Password;
+
+                var token = Token(user);
+                return token;
+            }
+            catch 
+            {
+                return BadRequest(new { error = "something went wrong" });
+            }
+         }
+
+        
     }
 }

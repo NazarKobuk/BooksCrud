@@ -31,16 +31,19 @@ namespace BooksCrud.Controllers
             _httpContextAccessor = httpContextAccessor;
         }
 
+        [HttpGet]
         [Authorize]
         public IActionResult GetLogin()
         {
             return Ok($"Ваш логин: {User.Identity.Name}");
         }
 
-        [Authorize(Roles = "user")]
+        [Authorize]
+        [HttpGet]
         public IActionResult GetRole()
         {
-            return Ok("Ваша роль: пользователь");
+            var user = _db.Users.First(x => x.Login == User.Identity.Name);
+            return Ok(user.Role);
         }
 
         [HttpGet]
@@ -63,10 +66,9 @@ namespace BooksCrud.Controllers
             }
         }
 
-
-        [HttpPost]
         [Authorize]
-        public async Task<IActionResult> PostBook([FromForm] CreateBook book)
+        [HttpPost]
+        public IActionResult PostBook([FromForm] CreateBook book)
         {
             if (Int32.Parse(book.Year) > DateTime.Now.Year || Int32.Parse(book.Year) < 0)
             {
@@ -75,7 +77,7 @@ namespace BooksCrud.Controllers
             }
 
             if (_db.Books.Where(x => x.Title == book.Title).Count() > 0 && _db.Books.Where(x => x.Author == book.Author).Count() > 0)
-                {
+            {
                 return BadRequest(new { error = "Such book is already exists" });
             }
 
@@ -86,24 +88,30 @@ namespace BooksCrud.Controllers
                 string filePath = Path.Combine(uploadsFolder, uniqueFileName);
                 book.BookFile.CopyTo(new FileStream(filePath, FileMode.Create));
 
-                var userId = _httpContextAccessor.HttpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
-                var id = (int)Convert.ChangeType(userId, typeof(int));
+                ////var userId = _httpContextAccessor.HttpContext.User.FindFirstValue(ClaimTypes.NameIdentifier);
 
-                Book bk = new Book { Author = book.Author, Title = book.Title, Year = book.Year, BookFilePath = uniqueFileName, UserId = id};
+                ////string userId = User.FindFirst(ClaimTypes.NameIdentifier)?.Value;
+
+                ////var claimsIdentity = this.User.Identity as ClaimsIdentity;
+                ////var userId = claimsIdentity.FindFirst(ClaimTypes.Name)?.Value;
+
+                ////var id = (int)Convert.ChangeType(userId, typeof(int));
+
+                Book bk = new Book { Author = book.Author, Title = book.Title, Year = book.Year, BookFilePath = uniqueFileName, UserId = book.Id };
                 _db.Books.Add(bk);
                 _db.SaveChanges();
-                return Ok(new { name = book.BookFile.FileName});
+                return Ok(new { name = book.BookFile.FileName });
             }
             else
             {
                 return BadRequest();
-            }            
+            }
         }
 
         [HttpPost]
-        public async Task<IActionResult> Upload(IFormFile file)
+        public IActionResult Upload(IFormFile file)
         {
-            if(file != null)
+            if (file != null)
             {
 
                 string uploadsFolder = Path.Combine(_hostingEnvironment.WebRootPath, "books");
@@ -119,6 +127,7 @@ namespace BooksCrud.Controllers
         }
 
         [HttpPost]
+        [Authorize]
         public IActionResult DownloadBook(DownloadBook book)
         {
 

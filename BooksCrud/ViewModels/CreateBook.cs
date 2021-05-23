@@ -19,5 +19,6 @@ namespace BooksCrud.ViewModels
         public string Year { get; set; }
         public IFormFile BookFile { get; set; }
 
+
     }
 }
